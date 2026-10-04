@@ -1,0 +1,50 @@
+# TradeSense application configuration.
+# Secrets (API keys, account id) live in .env, never here.
+
+oanda:
+  rest_url:
+    practice: https://api-fxpractice.oanda.com
+    live: https://api-fxtrade.oanda.com
+  stream_url:
+    practice: https://stream-fxpractice.oanda.com
+    live: https://stream-fxtrade.oanda.com
+  candle_count: 300
+  price: M                        # M=mid, B=bid, A=ask
+  request_timeout_seconds: 15
+  instruments_cache_seconds: 3600 # account instrument list cache
+
+timeframes:
+  "1m":  { granularity: M1,  refresh_seconds: 60 }
+  "5m":  { granularity: M5,  refresh_seconds: 300 }
+  "15m": { granularity: M15, refresh_seconds: 900 }
+
+analysis:
+  prompt_candles: 20              # compact OHLC rows sent with built-in / rule strategies
+  document_prompt_candles: 50     # rows sent with document reference strategies
+  chart_candles: 100              # candles rendered for image reference strategies
+  history_length: 10              # recent indicator values included per indicator
+  refresh_grace_seconds: 3        # auto-refresh waits this long after a candle closes
+
+library:
+  max_upload_mb: 10
+  allowed_types: [md, txt, pdf, docx, png, jpg, jpeg, webp]
+  max_document_chars: 40000       # document text above this is chunked + summarised
+  # Folders the MCP `add_reference_strategy(file_path)` tool may read from.
+  # Relative paths are resolved against the project root.
+  import_roots: [strategy_library/inbox]
+
+backtest:
+  days: 2                         # trading days replayed on every timeframe
+  # A BUY / SELL counts as a hit when price moved that way by more than the spread at
+  # that candle (OANDA bid/ask history) this many candles later (1m: 15 min, 5m: 30 min, 15m: 1 h).
+  horizon_bars: { "1m": 15, "5m": 6, "15m": 4 }
+  min_signals: 10                 # fewer BUY/SELL signals -> shown but not ranked
+  llm_top_n: 3                    # top strategies per timeframe re-checked by the LLM
+  llm_samples: 12                 # signals per strategy sent to the LLM (~$0.0001 each with Jev)
+  llm_rule_candidates: 3          # new rules the LLM proposes per timeframe
+  llm_timeout_seconds: 180        # time budget per LLM stage (cloud models only)
+  max_workers: 0                  # replay processes; 0 = CPU count - 1
+
+server:
+  host: 0.0.0.0
+  port: 8000

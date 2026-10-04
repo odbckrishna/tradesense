@@ -1,0 +1,42 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Tooling caches
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Secrets: never commit the real .env
+.env
+.env.*
+!.env.example
+
+# User uploads and generated strategy cards (keep the folder skeleton only)
+strategy_library/documents/*
+strategy_library/images/*
+strategy_library/cards/*
+strategy_library/inbox/*
+strategy_library/.cache/
+!strategy_library/**/.gitkeep
+
+# Model picker choices (per machine; see src/tradesense/llm/selection.py)
+config/llm_selection.json
+
+# Local run logs (scripts/start-local)
+logs/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

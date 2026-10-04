@@ -1,0 +1,29 @@
+# Strategy parameters, with optional per-timeframe overrides.
+# Resolution order: timeframe override -> default params -> class defaults.
+# Unknown parameter names are logged and ignored.
+#
+# YAML rule strategies (config/rules/*.yml) can be tuned the same way using
+# "<indicator_id>.<param>" keys, e.g.  rsi_ema_combo: { params: { rsi.period: 10 } }
+
+ema_crossover:
+  params: { fast: 9, slow: 21 }
+  overrides:
+    "15m": { fast: 50, slow: 200 }
+
+rsi_extremes:
+  params: { period: 14, overbought: 70, oversold: 30 }
+
+macd_momentum:
+  params: { fast: 12, slow: 26, signal: 9 }
+
+bollinger_squeeze:
+  params: { period: 20, std: 2.0, squeeze_percentile: 20 }
+
+supertrend:
+  params: { period: 10, multiplier: 3.0 }
+
+pivot_points:
+  params: { period: 4h }
+  overrides:
+    "1m": { period: 1h }
+    "15m": { period: 1D }

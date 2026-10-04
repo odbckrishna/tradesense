@@ -1,0 +1,120 @@
+# LLM configuration: fully plug and play.
+#
+# * Providers are defined once under `providers`.
+# * Roles point at providers, with ordered fallbacks.
+# * Switching e.g. from a local model to Anthropic is a one-line change of `primary`.
+# * API keys are NEVER written here: `api_key_env` names the environment variable
+#   (from .env) that holds the key.
+#
+# Provider types: anthropic | openai (incl. Azure via `azure: true`) | gemini | ollama
+#                 | openai_compatible (vLLM, Groq, OpenRouter, Together, LM Studio, ...)
+#                 | openrouter_decisions (decision models such as typesafe/jev-1.13)
+# Capabilities:   text | vision | decision (decision-only models: trading signals only,
+#                 never strategy extraction or images)
+# Optional per-provider keys: max_concurrency, pricing, timeout_seconds, json_mode,
+#                 options (provider specific knobs, see README).
+#
+# The model picker in the UI can change each role's primary at runtime; that choice is
+# saved in config/llm_selection.json (git-ignored) and this file is left untouched.
+
+roles:
+  text:
+    primary: openrouter_jev
+    fallbacks: [anthropic_sonnet, openai_main, openrouter, ollama_text]
+  vision:
+    primary: anthropic_sonnet
+    fallbacks: [openai_main, ollama_vision]
+  extraction:
+    primary: anthropic_sonnet
+    fallbacks: [ollama_text]
+
+settings:
+  max_concurrency: 4              # global cap on parallel LLM calls
+  timeout_seconds: 90
+  retries: 2                      # per provider, before falling back
+  temperature: 0.1                # ignored by providers whose API has no temperature (Anthropic)
+  max_output_tokens: 1024
+  force_json: true
+  track_costs: true
+
+providers:
+  anthropic_sonnet:
+    type: anthropic
+    model: claude-sonnet-5-5
+    api_key_env: ANTHROPIC_API_KEY
+    capabilities: [text, vision]
+    max_concurrency: 4            # optional per-provider cap
+    pricing: { input_per_mtok: 0.0, output_per_mtok: 0.0 }
+
+  anthropic_haiku:
+    type: anthropic
+    model: claude-haiku-4-5-20251001
+    api_key_env: ANTHROPIC_API_KEY
+    capabilities: [text, vision]
+
+  openai_main:
+    type: openai
+    model: gpt-4o
+    api_key_env: OPENAI_API_KEY
+    capabilities: [text, vision]
+
+  azure_openai:
+    type: openai
+    azure: true
+    endpoint: https://YOUR-RESOURCE.openai.azure.com
+    deployment: your-deployment-name
+    api_version: "2024-10-21"
+    api_key_env: AZURE_OPENAI_API_KEY
+    capabilities: [text, vision]
+
+  gemini_flash:
+    type: gemini
+    model: gemini-2.5-flash
+    api_key_env: GEMINI_API_KEY
+    capabilities: [text, vision]
+
+  openrouter:
+    type: openai_compatible
+    base_url: https://openrouter.ai/api/v1
+    model: meta-llama/llama-3.1-70b-instruct
+    api_key_env: OPENROUTER_API_KEY
+    capabilities: [text]
+    pricing: { input_per_mtok: 0.40, output_per_mtok: 0.40 }
+
+  openrouter_jev:
+    type: openrouter_decisions        # POST https://openrouter.ai/api/alpha/decisions
+    model: typesafe/jev-1.13
+    api_key_env: OPENROUTER_API_KEY
+    capabilities: [decision]          # returns probabilities only: no reasoning, no images
+    pricing: { input_per_mtok: 0.042, output_per_mtok: 0.0 }   # output tokens are free
+
+  groq:
+    type: openai_compatible
+    base_url: https://api.groq.com/openai/v1
+    model: llama-3.1-70b-versatile
+    api_key_env: GROQ_API_KEY
+    capabilities: [text]
+
+  vllm_local:
+    type: openai_compatible
+    base_url: http://localhost:8001/v1
+    model: Qwen/Qwen2.5-VL-7B-Instruct
+    api_key_env: VLLM_API_KEY     # optional for local servers
+    capabilities: [text, vision]
+
+  ollama_text:
+    type: ollama
+    base_url: http://localhost:11434
+    model: nimble-cpu:latest
+    capabilities: [text]
+    # CPU-only: Ollama's CUDA runner crashes on this machine's GPU driver (CUDA 12.5).
+    # A 9B model on CPU takes ~5 min per decision and serves one request at a time.
+    max_concurrency: 1
+    timeout_seconds: 600
+    options: { num_gpu: 0, think: false }   # think: false, or the answer lands in "thinking"
+
+  ollama_vision:
+    type: ollama
+    base_url: http://localhost:11434
+    model: qwen2.5vl:7b
+    capabilities: [text, vision]

@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TradeSense</title>
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/css/style.css">
+  <script defer src="https://unpkg.com/lightweight-charts@5.2.1/dist/lightweight-charts.standalone.production.js"
+          integrity="sha384-KkYqTZlM13Zya6fVUF3IGCBOQ1ehFeJVVgxaVvD/0MebineF9EI8Jkd3NnWNChqN"
+          crossorigin="anonymous"></script>
+  <script defer src="/static/js/app.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-row">
+      <div class="brand">
+        <span class="brand-name">TradeSense</span>
+        <span class="brand-tag" title="TradeSense never places orders">signals only</span>
+      </div>
+
+      <form id="run-form" class="controls" autocomplete="off">
+        <label class="field">
+          <span class="field-label">Instrument</span>
+          <input id="instrument" list="instrument-list" value="EUR_USD" spellcheck="false"
+                 aria-label="Instrument (OANDA format, e.g. EUR_USD)">
+          <datalist id="instrument-list"></datalist>
+        </label>
+
+        <fieldset class="field timeframe-toggles">
+          <legend class="field-label">Timeframes</legend>
+          <label class="check"><input type="checkbox" name="tf" value="1m" checked> 1 min</label>
+          <label class="check"><input type="checkbox" name="tf" value="5m" checked> 5 min</label>
+          <label class="check"><input type="checkbox" name="tf" value="15m" checked> 15 min</label>
+        </fieldset>
+
+        <button id="run-button" type="submit" class="btn btn-primary">
+          <span class="spinner" hidden></span><span class="label">Run Analysis</span>
+        </button>
+
+        <button id="backtest-button" type="button" class="btn"
+                title="Replay the last 2 days on every timeframe and rank strategies by how often their BUY/SELL calls were right">
+          <span class="spinner" hidden></span><span class="label">Backtest</span>
+        </button>
+
+        <label class="switch" title="Re-run each timeframe when its candle closes">
+          <input id="auto-refresh" type="checkbox" role="switch">
+          <span class="switch-track"><span class="switch-thumb"></span></span>
+          <span>Auto-refresh</span>
+        </label>
+      </form>
+
+      <div class="stream-status" id="stream-status" title="Live price stream">
+        <span class="dot dot-idle"></span><span class="stream-label">stream idle</span>
+      </div>
+    </div>
+
+    <div class="topbar-row topbar-secondary">
+      <div class="llm-panel" id="llm-panel" aria-live="polite">
+        <span class="muted">LLM status loading…</span>
+      </div>
+      <button id="llm-reload" type="button" class="btn btn-small">Reload LLM config</button>
+      <div class="run-summary" id="run-summary" title="Last run usage">
+        <span><span class="muted">Tokens</span> <b id="sum-tokens">–</b></span>
+        <span><span class="muted">Est. cost</span> <b id="sum-cost">–</b></span>
+        <span><span class="muted">Avg latency</span> <b id="sum-latency">–</b></span>
+      </div>
+    </div>
+  </header>
+
+  <div id="banners" class="banners"></div>
+
+  <nav class="tabs" role="tablist">
+    <button class="tab active" role="tab" data-tab="dashboard" aria-selected="true">Dashboard</button>
+    <button class="tab" role="tab" data-tab="library" aria-selected="false">Strategy Library</button>
+    <button class="tab" role="tab" data-tab="backtest" aria-selected="false">Backtest</button>
+  </nav>
+
+  <main>
+    <section id="tab-dashboard" class="tab-panel" role="tabpanel">
+      <section class="panel chart-panel">
+        <div class="panel-head">
+          <div class="segmented" id="chart-tf" role="group" aria-label="Chart timeframe">
+            <button type="button" data-tf="1m">1m</button>
+            <button type="button" data-tf="5m" class="active">5m</button>
+            <button type="button" data-tf="15m">15m</button>
+          </div>
+          <label class="check"><input type="checkbox" id="overlay-ema" checked> EMA 20 / 50</label>
+          <label class="check"><input type="checkbox" id="overlay-markers" checked> Decision markers</label>
+          <label class="field inline replay-field"
+                 title="Replay a strategy's last 2 days on this timeframe: where it signalled and whether it was right">
+            <span class="muted">Replay</span>
+            <select id="replay-strategy" aria-label="Replay a strategy on the chart">
+              <option value="">Off (live chart)</option>
+            </select>
+          </label>
+          <button type="button" class="btn btn-small" id="replay-exit" hidden>Back to live</button>
+          <div class="ticker" id="ticker" aria-live="off">
+            <span class="ticker-inst" id="ticker-inst">EUR_USD</span>
+            <span><span class="muted">Bid</span> <b id="tick-bid">–</b></span>
+            <span><span class="muted">Ask</span> <b id="tick-ask">–</b></span>
+            <span><span class="muted">Spread</span> <b id="tick-spread">–</b></span>
+          </div>
+        </div>
+        <div class="replay-bar" id="replay-bar" hidden aria-live="polite">
+          <div class="replay-summary">
+            <span class="spinner" id="replay-spinner" hidden></span>
+            <span id="replay-summary"></span>
+          </div>
+          <div class="replay-tools">
+            <span class="replay-legend">
+              <span class="glyph glyph-hit">▲▼</span> right
+              <span class="glyph glyph-miss">▲▼</span> wrong
+              <span class="glyph glyph-pending">▲▼</span> not judged yet
+            </span>
+            <button type="button" class="btn btn-small" id="replay-prev">◀ Prev entry</button>
+            <button type="button" class="btn btn-small" id="replay-next">Next entry ▶</button>
+          </div>
+        </div>
+        <div class="chart-wrap">
+          <div id="chart" class="chart"></div>
+          <div id="chart-info" class="chart-info" hidden></div>
+          <div id="chart-message" class="chart-message" hidden></div>
+        </div>
+      </section>
+
+      <section class="strategy-controls">
+        <label class="field inline">
+          <span class="muted">Copy picks from</span>
+          <select id="copy-source">
+            <option value="1m">1 min</option><option value="5m">5 min</option><option value="15m">15 min</option>
+          </select>
+        </label>
+        <button type="button" class="btn btn-small" id="apply-all">Apply selection to all timeframes</button>
+        <button type="button" class="btn btn-small" id="clear-all">Clear all</button>
+        <button type="button" class="btn btn-small" id="reload-strategies">Reload strategies</button>
+        <span class="legend muted">⚙ built-in · 📏 rule · 📄 document · 🖼 image</span>
+      </section>
+
+      <section class="columns" id="columns" aria-live="polite"></section>
+
+      <section class="panel results-panel">
+        <div class="panel-head">
+          <h2>Results</h2>
+          <button type="button" class="btn btn-small" id="export-json">Export JSON</button>
+        </div>
+        <div class="table-wrap">
+          <table class="results" id="results-table">
+            <thead>
+              <tr>
+                <th data-key="timeframe" aria-sort="none">Timeframe</th>
+                <th data-key="strategy" aria-sort="none">Strategy</th>
+                <th data-key="source" aria-sort="none">Type</th>
+                <th data-key="signal" aria-sort="none">Signal</th>
+                <th data-key="buy" aria-sort="none" class="num">P(Buy)</th>
+                <th data-key="sell" aria-sort="none" class="num">P(Sell)</th>
+                <th data-key="sideways" aria-sort="none" class="num">P(Sideways)</th>
+                <th data-key="confidence" aria-sort="none" class="num">Confidence</th>
+                <th data-key="model" aria-sort="none">Model</th>
+                <th data-key="time" aria-sort="none">Time</th>
+              </tr>
+            </thead>
+            <tbody><tr class="empty"><td colspan="10">Run an analysis to see results.</td></tr></tbody>
+          </table>
+        </div>
+      </section>
+    </section>
+
+    <section id="tab-library" class="tab-panel" role="tabpanel" hidden>
+      <div id="library-list-view">
+        <label class="dropzone" id="dropzone" tabindex="0">
+          <input type="file" id="file-input" hidden>
+          <span class="dropzone-title">Drop a strategy file here or click to choose</span>
+          <span class="muted" id="dropzone-hint">.md .txt .pdf .docx .png .jpg .webp</span>
+          <span class="dropzone-status" id="dropzone-status" aria-live="polite"></span>
+        </label>
+        <div class="library-grid" id="library-grid"></div>
+      </div>
+
+      <div id="review-view" class="review" hidden>
+        <div class="review-head">
+          <button type="button" class="btn btn-small" id="review-back">← Library</button>
+          <h2 id="review-title">Review</h2>
+          <span class="badge" id="review-status"></span>
+        </div>
+        <div class="review-split">
+          <section class="panel review-preview" id="review-preview" aria-label="Original file"></section>
+          <form class="panel review-form" id="review-form" autocomplete="off"></form>
+        </div>
+      </div>
+    </section>
+
+    <section id="tab-backtest" class="tab-panel" role="tabpanel" hidden>
+      <section class="panel">
+        <div class="panel-head">
+          <h2 id="bt-title">Backtest</h2>
+          <label class="check" title="Replay the live LLM decision on a sample of the top strategies' signals (about $0.01)">
+            <input type="checkbox" id="bt-llm-check" checked> LLM check top picks</label>
+          <label class="check" title="Ask a text model to propose new rules, judged like the templates (a few cents)">
+            <input type="checkbox" id="bt-llm-rules" checked> LLM-designed rules</label>
+          <button type="button" class="btn btn-small" id="bt-apply" disabled>Use best picks on dashboard</button>
+          <button type="button" class="btn btn-primary btn-small" id="bt-run">
+            <span class="spinner" hidden></span><span class="label">Run backtest</span>
+          </button>
+        </div>
+        <div class="bt-status">
+          <p class="muted" id="bt-summary">Replays the last 2 days of the current instrument on 1m, 5m and 15m,
+            scores how often each strategy's BUY / SELL calls were right, and searches for a new rule that fits.
+            Takes about 2 minutes.</p>
+          <div class="bt-progress" id="bt-progress" hidden><div class="bt-progress-bar" id="bt-progress-bar"></div></div>
+          <p class="small muted" id="bt-progress-label" aria-live="polite"></p>
+        </div>
+      </section>
+      <section class="bt-columns" id="bt-columns" aria-live="polite"></section>
+      <p class="small muted">Hit rates over a couple of days are a small sample: they describe the recent past,
+        not the future. Signals only, not financial advice.</p>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <p class="disclaimer">{{ disclaimer }}</p>
+    <p class="muted small">TradeSense {{ version }} · signals only, no order placement · charts by
+      <a href="https://www.tradingview.com/" target="_blank" rel="noopener noreferrer">TradingView Lightweight Charts™</a></p>
+  </footer>
+
+  <div class="toasts" id="toasts" aria-live="assertive"></div>
+</body>
+</html>

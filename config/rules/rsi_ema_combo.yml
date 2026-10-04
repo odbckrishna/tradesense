@@ -1,0 +1,12 @@
+name: rsi_ema_combo
+description: RSI pullback in direction of EMA trend
+category: momentum
+min_candles: 60
+indicators:
+  - { id: ema_fast, type: ema, period: 20 }
+  - { id: ema_slow, type: ema, period: 50 }
+  - { id: rsi,      type: rsi, period: 14 }
+rules:
+  buy:  "ema_fast > ema_slow and rsi < 40"
+  sell: "ema_fast < ema_slow and rsi > 60"
+# anything else = sideways
